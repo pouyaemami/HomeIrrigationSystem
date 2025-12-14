@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Wire.h>
 
 int flowPin = 2;            // Flow sensor input pin
 int waterPumpRelayPin = 3;  // Relay control pin
