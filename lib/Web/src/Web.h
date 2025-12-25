@@ -9,6 +9,8 @@ extern uint8_t maxI2cBuffer;
 
 void printWeb(WiFiClient &client);
 
+void listTemperatureHumidity(WiFiClient &client);
+
 void listConnectedDevices(WiFiClient &client);
 
 // Helper function to extract query parameter value

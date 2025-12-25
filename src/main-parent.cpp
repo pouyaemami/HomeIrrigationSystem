@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <WiFi101.h>
+#include <DHT.h>
 
 #include "wifi_credentials.h"
 #include "enums.h"
@@ -13,6 +14,13 @@ int status = WL_IDLE_STATUS; // the Wifi radio's status
 
 WiFiServer server(80);
 int ledPin = LED_BUILTIN;
+
+#define DHTPIN 0      // Pin which is connected to the DHT sensor
+#define DHTTYPE DHT22 // DHT 22 (AM2302)
+DHT dht(DHTPIN, DHTTYPE);
+
+float temperature = 0.0;
+float humidity = 0.0;
 
 #define DEFAULT_ADDRESS 0x00       // Default address for unassigned devices
 #define BASE_ASSIGNED_ADDRESS 0x08 // Starting address for assignment
@@ -207,6 +215,8 @@ void setup()
   Serial.println();
   discoverDevices();
   Serial.println("\nDevice discovery complete!");
+
+  dht.begin();
 }
 
 void loop()
@@ -217,4 +227,7 @@ void loop()
   {
     printWeb(client);
   }
+
+  temperature = dht.readTemperature();
+  humidity = dht.readHumidity();
 }

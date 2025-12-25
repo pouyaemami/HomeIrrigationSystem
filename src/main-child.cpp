@@ -6,6 +6,12 @@
 #define DEFAULT_ADDRESS 0x00 // Default unassigned address (general call)
 #define MAX_RESPONSE_SIZE 31 // Maximum response data size (32 - 1 for length byte)
 
+int ledPin = LED_BUILTIN;
+int ledState = LOW;
+bool identifyMode = false;
+unsigned long previousMillis = 0;
+const long interval = 250;
+
 int valvePin = 2;
 bool valveActive = false;
 
@@ -55,8 +61,15 @@ void handleAction(DeviceAction action)
     sendResponse("Irrigation stopped");
     currentStatus = STATUS_STANDBY;
     break;
+  case DEVICE_IDENTIFY:
+    Serial.println("Entering identify mode (simulated)");
+    identifyMode = true;
+    sendResponse("Identifying");
+    break;
   case DEVICE_SLEEP:
     Serial.println("Entering sleep mode (simulated)");
+    identifyMode = false;
+    currentStatus = STATUS_STANDBY;
     sendResponse("Sleeping");
     break;
   default:
@@ -109,6 +122,7 @@ void receiveEvent(int numBytes)
 
 void setup()
 {
+  pinMode(ledPin, OUTPUT);
   pinMode(valvePin, OUTPUT);
   digitalWrite(valvePin, LOW);
   Serial.begin(115200);
@@ -126,11 +140,41 @@ void loop()
   if (currentStatus == STATUS_ACTIVE && !valveActive)
   {
     digitalWrite(valvePin, HIGH);
+    digitalWrite(ledPin, HIGH);
     valveActive = true;
   }
   else if (currentStatus == STATUS_STANDBY && valveActive)
   {
     digitalWrite(valvePin, LOW);
+    digitalWrite(ledPin, LOW);
     valveActive = false;
+  }
+
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= interval)
+  {
+    // save the last time you blinked the LED
+    previousMillis = currentMillis;
+
+    // if the LED is off turn it on and vice-versa:
+    if (ledState == LOW)
+    {
+      ledState = HIGH;
+    }
+    else
+    {
+      ledState = LOW;
+    }
+
+    // set the LED with the ledState of the variable:
+    if (identifyMode)
+    {
+      digitalWrite(ledPin, ledState);
+    }
+    else
+    {
+      digitalWrite(ledPin, LOW);
+    }
   }
 }

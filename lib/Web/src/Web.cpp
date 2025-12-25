@@ -7,6 +7,9 @@ extern uint8_t knownDevices[];
 extern uint8_t deviceCount;
 extern uint8_t maxI2cBuffer;
 
+extern float temperature;
+extern float humidity;
+
 // Helper function to extract query parameter value from URL
 String getQueryParam(String url, String paramName)
 {
@@ -24,6 +27,22 @@ String getQueryParam(String url, String paramName)
   }
 
   return url.substring(valueStart, valueEnd);
+}
+
+void sendDeviceCommand(String addressParam, DeviceAction action)
+{
+  if (addressParam.length() > 0)
+  {
+    // Convert hex string to byte
+    uint8_t targetAddress = (uint8_t)strtol(addressParam.c_str(), NULL, 16);
+    Wire.beginTransmission(targetAddress);
+    Wire.write(action);
+    Wire.endTransmission();
+  }
+  else
+  {
+    Serial.println("Error: No address provided for START command");
+  }
 }
 
 void printWeb(WiFiClient &client)
@@ -52,6 +71,7 @@ void printWeb(WiFiClient &client)
 
           // Ping known devices and display moisture data
           listConnectedDevices(client);
+          listTemperatureHumidity(client);
 
           // The HTTP response ends with another blank line:
           client.println();
@@ -64,44 +84,22 @@ void printWeb(WiFiClient &client)
           if (currentLine.startsWith("GET /START"))
           {
             String addressParam = getQueryParam(currentLine, "address");
-
-            if (addressParam.length() > 0)
-            {
-              // Convert hex string to byte
-              uint8_t targetAddress = (uint8_t)strtol(addressParam.c_str(), NULL, 16);
-
-              Serial.print("Starting irrigation on device 0x");
-              Serial.println(targetAddress, HEX);
-
-              Wire.beginTransmission(targetAddress);
-              Wire.write(DEVICE_ACTIVATE);
-              Wire.endTransmission();
-            }
-            else
-            {
-              Serial.println("Error: No address provided for START command");
-            }
+            sendDeviceCommand(addressParam, DEVICE_ACTIVATE);
           }
           else if (currentLine.startsWith("GET /STOP"))
           {
             String addressParam = getQueryParam(currentLine, "address");
-
-            if (addressParam.length() > 0)
-            {
-              // Convert hex string to byte
-              uint8_t targetAddress = (uint8_t)strtol(addressParam.c_str(), NULL, 16);
-
-              Serial.print("Stopping irrigation on device 0x");
-              Serial.println(targetAddress, HEX);
-
-              Wire.beginTransmission(targetAddress);
-              Wire.write(DEVICE_DEACTIVATE);
-              Wire.endTransmission();
-            }
-            else
-            {
-              Serial.println("Error: No address provided for STOP command");
-            }
+            sendDeviceCommand(addressParam, DEVICE_DEACTIVATE);
+          }
+          else if (currentLine.startsWith("GET /IDENTIFY"))
+          {
+            String addressParam = getQueryParam(currentLine, "address");
+            sendDeviceCommand(addressParam, DEVICE_IDENTIFY);
+          }
+          else if (currentLine.startsWith("GET /SLEEP"))
+          {
+            String addressParam = getQueryParam(currentLine, "address");
+            sendDeviceCommand(addressParam, DEVICE_SLEEP);
           }
 
           currentLine = ""; // clear currentLine
@@ -116,6 +114,19 @@ void printWeb(WiFiClient &client)
   // close the connection:
   client.stop();
   Serial.println("client disconnected");
+}
+
+void listTemperatureHumidity(WiFiClient &client)
+{
+  client.print("<h2>Current Environmental Data</h2>");
+  client.print("<ul>");
+  client.print("<li><pre>Temperature: ");
+  client.print(temperature);
+  client.print(" &deg;C</pre></li>");
+  client.print("<li><pre>Humidity: ");
+  client.print(humidity);
+  client.print(" %</pre></li>");
+  client.print("</ul>");
 }
 
 void listConnectedDevices(WiFiClient &client)
@@ -159,7 +170,15 @@ void listConnectedDevices(WiFiClient &client)
           client.print(address, HEX);
           client.print(": ");
           client.print(response);
-          client.print("</pre><a href=\"/START?address=" + String(address, HEX) + "\">Start Irrigation</a> | <a href=\"/STOP?address=" + String(address, HEX) + "\">Stop Irrigation</a></li>");
+          client.print("</pre>");
+          client.print("<a href=\"/START?address=" + String(address, HEX) + "\">Start</a>");
+          client.print(" | ");
+          client.print("<a href=\"/STOP?address=" + String(address, HEX) + "\">Stop</a>");
+          client.print(" | ");
+          client.print("<a href=\"/IDENTIFY?address=" + String(address, HEX) + "\">Identify</a>");
+          client.print(" | ");
+          client.print("<a href=\"/SLEEP?address=" + String(address, HEX) + "\">Sleep</a>");
+          client.print("</li>");
         }
       }
     }
