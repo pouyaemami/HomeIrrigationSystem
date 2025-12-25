@@ -1,0 +1,8 @@
+{
+  "name": "Web",
+  "version": "1.0.0",
+  "description": "Web interface library for Irrigation System",
+  "build": {
+    "flags": ["-I$PROJECT_SRC_DIR", "-I$PROJECT_INCLUDE_DIR"]
+  }
+}

@@ -1,14 +1,19 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <ArduinoJson.h>
+#include "enums.h"
 
 #define DEFAULT_ADDRESS 0x00 // Default unassigned address (general call)
 #define MAX_RESPONSE_SIZE 31 // Maximum response data size (32 - 1 for length byte)
 
+int valvePin = 2;
+bool valveActive = false;
+
 JsonDocument doc;
 uint8_t currentAddress = DEFAULT_ADDRESS;
 bool addressAssigned = false;
-String lastRequest = ""; // Track the last request type
+volatile DeviceStatus currentStatus = STATUS_UNINITIALIZED;
+volatile DeviceAction currentAction = DEVICE_SLEEP;
 
 void sendResponse(const char *data)
 {
@@ -27,44 +32,61 @@ void sendCurrentMoisture()
   // Read analog value from A0 (0-1023 range)
   int moistureValue = analogRead(A0);
   doc["moisture"] = moistureValue;
-  char moistureBuffer[50];            // Max 4 digits + null terminator
-  serializeJson(doc, moistureBuffer); // For debugging
-  // snprintf(moistureBuffer, sizeof(moistureBuffer), "%d", moistureValue);
+  char moistureBuffer[50];
+  serializeJson(doc, moistureBuffer);
   sendResponse(moistureBuffer);
+}
+
+void handleAction(DeviceAction action)
+{
+  switch (action)
+  {
+  case DEVICE_STATUS:
+    Serial.println("Sending STATUS response");
+    sendCurrentMoisture();
+    break;
+  case DEVICE_ACTIVATE:
+    Serial.println("Starting irrigation (simulated)");
+    sendResponse("Irrigation started");
+    currentStatus = STATUS_ACTIVE;
+    break;
+  case DEVICE_DEACTIVATE:
+    Serial.println("Stopping irrigation (simulated)");
+    sendResponse("Irrigation stopped");
+    currentStatus = STATUS_STANDBY;
+    break;
+  case DEVICE_SLEEP:
+    Serial.println("Entering sleep mode (simulated)");
+    sendResponse("Sleeping");
+    break;
+  default:
+    Serial.println("Unknown action received");
+    sendResponse("Unknown action");
+    break;
+  }
 }
 
 void requestEvent()
 {
-  if (!addressAssigned)
+  if (currentStatus == STATUS_UNINITIALIZED)
   {
-    sendResponse("new");
-  }
-  else if (lastRequest == "ping")
-  {
-    sendResponse("pong");
-  }
-  else if (lastRequest == "moistureCheck")
-  {
-    sendCurrentMoisture();
-  }
-  else
-  {
-    sendResponse("ok");
+    Wire.write(STATUS_UNINITIALIZED);
+    return;
   }
 
-  // Clear the last request
-  lastRequest = "";
+  handleAction(currentAction);
 }
 
 void receiveEvent(int numBytes)
 {
   if (numBytes < 1)
+  {
     return;
+  }
 
-  char command = Wire.read();
+  currentAction = (DeviceAction)Wire.read();
 
-  // Address assignment command
-  if (command == 'A' && numBytes == 2)
+  if (currentAction == DEVICE_ASSIGN_ADDRESS)
   {
     uint8_t newAddress = Wire.read();
     currentAddress = newAddress;
@@ -78,33 +100,17 @@ void receiveEvent(int numBytes)
     Wire.begin(currentAddress);
     Wire.onReceive(receiveEvent);
     Wire.onRequest(requestEvent);
+    currentStatus = STATUS_STANDBY;
     return;
   }
 
-  // Read remaining bytes as message
-  String message = "";
-  message += command;
-  while (Wire.available())
-  {
-    char c = Wire.read();
-    message += c;
-  }
-
-  // Handle different message types
-  if (message == "ping")
-  {
-    Serial.println("Received ping, responding with pong");
-    lastRequest = "ping";
-  }
-  else if (message == "moistureCheck")
-  {
-    Serial.println("Received moistureCheck, responding with moisture value");
-    lastRequest = "moistureCheck";
-  }
+  handleAction(currentAction);
 }
 
 void setup()
 {
+  pinMode(valvePin, OUTPUT);
+  digitalWrite(valvePin, LOW);
   Serial.begin(115200);
   Serial.println("I2C Slave starting...");
 
@@ -117,6 +123,14 @@ void setup()
 
 void loop()
 {
-  // Nothing needed in loop for I2C slave
-  delay(100);
+  if (currentStatus == STATUS_ACTIVE && !valveActive)
+  {
+    digitalWrite(valvePin, HIGH);
+    valveActive = true;
+  }
+  else if (currentStatus == STATUS_STANDBY && valveActive)
+  {
+    digitalWrite(valvePin, LOW);
+    valveActive = false;
+  }
 }

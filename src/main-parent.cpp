@@ -4,6 +4,8 @@
 #include <WiFi101.h>
 
 #include "wifi_credentials.h"
+#include "enums.h"
+#include "Web.h"
 
 char ssid[] = SECRET_SSID;   // your network SSID (name)
 char pass[] = SECRET_PASS;   // your network password (use for WPA, or use as key for WEP)
@@ -12,13 +14,12 @@ int status = WL_IDLE_STATUS; // the Wifi radio's status
 WiFiServer server(80);
 int ledPin = LED_BUILTIN;
 
-WiFiClient client = server.available();
-
 #define DEFAULT_ADDRESS 0x00       // Default address for unassigned devices
 #define BASE_ASSIGNED_ADDRESS 0x08 // Starting address for assignment
 #define MAX_DEVICES 10             // Maximum number of devices to track
 #define MAX_I2C_BUFFER 32          // Maximum I2C buffer size
 
+uint8_t maxI2cBuffer = MAX_I2C_BUFFER;
 uint8_t nextAvailableAddress = BASE_ASSIGNED_ADDRESS;
 uint8_t knownDevices[MAX_DEVICES];
 uint8_t deviceCount = 0;
@@ -55,9 +56,8 @@ void assignAddress(byte defaultAddr)
   Serial.print(nextAvailableAddress, HEX);
   Serial.println(" to new device...");
 
-  // Send address assignment command: 'A' followed by new address
   Wire.beginTransmission(defaultAddr);
-  Wire.write('A');
+  Wire.write(DEVICE_ASSIGN_ADDRESS);
   Wire.write(nextAvailableAddress);
   Wire.endTransmission();
 
@@ -148,113 +148,6 @@ void printData()
   Serial.println(rssi);
 }
 
-void printWEB()
-{
-
-  if (client)
-  {                               // if you get a client,
-    Serial.println("new client"); // print a message out the serial port
-    String currentLine = "";      // make a String to hold incoming data from the client
-    while (client.connected())
-    { // loop while the client's connected
-      if (client.available())
-      {                         // if there's bytes to read from the client,
-        char c = client.read(); // read a byte, then
-        Serial.write(c);        // print it out the serial monitor
-        if (c == '\n')
-        { // if the byte is a newline character
-
-          // if the current line is blank, you got two newline characters in a row.
-          // that's the end of the client HTTP request, so send a response:
-          if (currentLine.length() == 0)
-          {
-
-            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
-            // and a content-type so the client knows what's coming, then a blank line:
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-type:text/html");
-            client.println();
-
-            // create the buttons
-            client.print("Click <a href=\"/H\">here</a> turn the LED on<br>");
-            client.print("Click <a href=\"/L\">here</a> turn the LED off<br><br>");
-
-            // Ping known devices and display moisture data
-            if (deviceCount > 0)
-            {
-              client.print("<h3>Device Moisture Readings:</h3>");
-
-              for (uint8_t i = 0; i < deviceCount; i++)
-              {
-                byte address = knownDevices[i];
-
-                // Send moistureCheck message to the device
-                Wire.beginTransmission(address);
-                Wire.write("moistureCheck");
-                byte error = Wire.endTransmission();
-
-                if (error == 0)
-                {
-                  // Request response from the device
-                  delay(10);
-                  Wire.requestFrom(address, MAX_I2C_BUFFER);
-
-                  if (Wire.available())
-                  {
-                    uint8_t dataLength = Wire.read();
-                    String response = "";
-                    for (uint8_t j = 0; j < dataLength && Wire.available(); j++)
-                    {
-                      response += (char)Wire.read();
-                    }
-
-                    client.print("Device 0x");
-                    if (address < 16)
-                      client.print("0");
-                    client.print(address, HEX);
-                    client.print(": ");
-                    client.print(response);
-                    client.print("<br>");
-                  }
-                }
-              }
-            }
-            else
-            {
-              client.print("No devices connected<br>");
-            }
-
-            // The HTTP response ends with another blank line:
-            client.println();
-            // break out of the while loop:
-            break;
-          }
-          else
-          { // if you got a newline, then clear currentLine:
-            currentLine = "";
-          }
-        }
-        else if (c != '\r')
-        {                   // if you got anything else but a carriage return character,
-          currentLine += c; // add it to the end of the currentLine
-        }
-
-        if (currentLine.endsWith("GET /H"))
-        {
-          digitalWrite(ledPin, HIGH);
-        }
-        if (currentLine.endsWith("GET /L"))
-        {
-          digitalWrite(ledPin, LOW);
-        }
-      }
-    }
-    // close the connection:
-    client.stop();
-    Serial.println("client disconnected");
-  }
-}
-
 void setup()
 {
   Wire.begin(); // join i2c bus as master
@@ -270,8 +163,8 @@ void setup()
     // Connect to WPA/WPA2 network:
     status = WiFi.begin(ssid, pass);
 
-    // wait 10 seconds for connection:
-    delay(10000);
+    // wait 1 second for connection:
+    delay(1000);
   }
 
   // you're connected now, so print out the data:
@@ -301,14 +194,8 @@ void setup()
 
     if (Wire.available())
     {
-      uint8_t dataLength = Wire.read();
-      String response = "";
-      for (uint8_t i = 0; i < dataLength && Wire.available(); i++)
-      {
-        response += (char)Wire.read();
-      }
-
-      if (response == "new")
+      DeviceStatus status = (DeviceStatus)Wire.read();
+      if (status == STATUS_UNINITIALIZED)
       {
         Serial.println("Found unassigned device at default address");
         assignAddress(DEFAULT_ADDRESS);
@@ -320,15 +207,14 @@ void setup()
   Serial.println();
   discoverDevices();
   Serial.println("\nDevice discovery complete!");
-  Serial.println("Starting ping loop...\n");
 }
 
 void loop()
 {
-  client = server.available();
+  WiFiClient client = server.available();
 
   if (client)
   {
-    printWEB();
+    printWeb(client);
   }
 }

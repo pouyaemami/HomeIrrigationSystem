@@ -1,0 +1,20 @@
+#ifndef ENUMS_H
+#define ENUMS_H
+
+enum DeviceStatus
+{
+  STATUS_UNINITIALIZED,
+  STATUS_ACTIVE,
+  STATUS_STANDBY,
+};
+
+enum DeviceAction
+{
+  DEVICE_ASSIGN_ADDRESS,
+  DEVICE_STATUS,
+  DEVICE_ACTIVATE,
+  DEVICE_DEACTIVATE,
+  DEVICE_SLEEP
+};
+
+#endif
