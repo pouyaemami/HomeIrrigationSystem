@@ -1,0 +1,8 @@
+{
+  "name": "DeviceManagement",
+  "version": "1.0.4",
+  "description": "Device Management library for Arduino",
+  "build": {
+    "flags": ["-I$PROJECT_SRC_DIR", "-I$PROJECT_INCLUDE_DIR"]
+  }
+}

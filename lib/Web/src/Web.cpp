@@ -4,12 +4,12 @@
 #include "enums.h"
 
 // Helper function to extract query parameter value from URL
-String getQueryParam(String url, String paramName)
+uint8_t getQueryParam(String url, String paramName)
 {
   int paramIndex = url.indexOf(paramName + "=");
   if (paramIndex == -1)
   {
-    return ""; // Parameter not found
+    return 0; // Parameter not found
   }
 
   int valueStart = paramIndex + paramName.length() + 1;
@@ -19,7 +19,7 @@ String getQueryParam(String url, String paramName)
     valueEnd = url.indexOf(' ', valueStart); // Space marks end of URL
   }
 
-  return url.substring(valueStart, valueEnd);
+  return url.substring(valueStart, valueEnd).toInt();
 }
 
 void sendDeviceCommand(String addressParam, DeviceAction action)
@@ -38,7 +38,7 @@ void sendDeviceCommand(String addressParam, DeviceAction action)
   }
 }
 
-void printWeb(WiFiClient &client)
+void printWeb(WiFiClient &client, DeviceManagement &deviceManager)
 {
   if (!client)
     return;
@@ -66,7 +66,7 @@ void printWeb(WiFiClient &client)
           client.println();
 
           // Ping known devices and display moisture data
-          listConnectedDevices(client);
+          listConnectedDevices(client, deviceManager);
           listTemperatureHumidity(client);
 
           // The HTTP response ends with another blank line:
@@ -79,23 +79,23 @@ void printWeb(WiFiClient &client)
           // Check for commands only when we have a complete line
           if (currentLine.startsWith("GET /START"))
           {
-            String addressParam = getQueryParam(currentLine, "address");
-            sendDeviceCommand(addressParam, DEVICE_ACTIVATE);
+            uint8_t addressParam = getQueryParam(currentLine, "address");
+            deviceManager.sendDeviceCommand(addressParam, DEVICE_ACTIVATE);
           }
           else if (currentLine.startsWith("GET /STOP"))
           {
-            String addressParam = getQueryParam(currentLine, "address");
-            sendDeviceCommand(addressParam, DEVICE_DEACTIVATE);
+            uint8_t addressParam = getQueryParam(currentLine, "address");
+            deviceManager.sendDeviceCommand(addressParam, DEVICE_DEACTIVATE);
           }
           else if (currentLine.startsWith("GET /IDENTIFY"))
           {
-            String addressParam = getQueryParam(currentLine, "address");
-            sendDeviceCommand(addressParam, DEVICE_IDENTIFY);
+            uint8_t addressParam = getQueryParam(currentLine, "address");
+            deviceManager.sendDeviceCommand(addressParam, DEVICE_IDENTIFY);
           }
           else if (currentLine.startsWith("GET /SLEEP"))
           {
-            String addressParam = getQueryParam(currentLine, "address");
-            sendDeviceCommand(addressParam, DEVICE_SLEEP);
+            uint8_t addressParam = getQueryParam(currentLine, "address");
+            deviceManager.sendDeviceCommand(addressParam, DEVICE_SLEEP);
           }
 
           currentLine = ""; // clear currentLine
@@ -125,58 +125,38 @@ void listTemperatureHumidity(WiFiClient &client)
   client.print("</ul>");
 }
 
-void listConnectedDevices(WiFiClient &client)
+void listConnectedDevices(WiFiClient &client, DeviceManagement &deviceManager)
 {
   client.print("<h2>Connected I2C Devices Moisture Readings</h2>");
 
-  if (deviceCount > 0)
+  DeviceBuffer devices = deviceManager.getConnectedDevices();
+  if (devices.size > 0)
   {
     client.print("<h3>Device Moisture Readings</h3>");
 
     client.print("<ul>");
-    for (uint8_t i = 0; i < deviceCount; i++)
+    for (uint8_t i = 0; i < devices.size; i++)
     {
-      byte address = knownDevices[i];
+      byte address = devices.data[i];
+      String data = deviceManager.getDeviceData(address);
 
-      // Send DEVICE_STATUS message to the device
-      Wire.beginTransmission(address);
-      Wire.write(DEVICE_STATUS);
-      byte error = Wire.endTransmission();
-
-      if (error == 0)
+      client.print("<li><pre>Device 0x");
+      if (address < 16)
       {
-        // Request response from the device
-        delay(10);
-        Wire.requestFrom(address, maxI2cBuffer);
-
-        if (Wire.available())
-        {
-          uint8_t dataLength = Wire.read();
-          String response = "";
-          for (uint8_t j = 0; j < dataLength && Wire.available(); j++)
-          {
-            response += (char)Wire.read();
-          }
-
-          client.print("<li><pre>Device 0x");
-          if (address < 16)
-          {
-            client.print("0");
-          }
-          client.print(address, HEX);
-          client.print(": ");
-          client.print(response);
-          client.print("</pre>");
-          client.print("<a href=\"/START?address=" + String(address, HEX) + "\">Start</a>");
-          client.print(" | ");
-          client.print("<a href=\"/STOP?address=" + String(address, HEX) + "\">Stop</a>");
-          client.print(" | ");
-          client.print("<a href=\"/IDENTIFY?address=" + String(address, HEX) + "\">Identify</a>");
-          client.print(" | ");
-          client.print("<a href=\"/SLEEP?address=" + String(address, HEX) + "\">Sleep</a>");
-          client.print("</li>");
-        }
+        client.print("0");
       }
+      client.print(address, HEX);
+      client.print(": ");
+      client.print(data);
+      client.print("</pre>");
+      client.print("<a href=\"/START?address=" + String(address, HEX) + "\">Start</a>");
+      client.print(" | ");
+      client.print("<a href=\"/STOP?address=" + String(address, HEX) + "\">Stop</a>");
+      client.print(" | ");
+      client.print("<a href=\"/IDENTIFY?address=" + String(address, HEX) + "\">Identify</a>");
+      client.print(" | ");
+      client.print("<a href=\"/SLEEP?address=" + String(address, HEX) + "\">Sleep</a>");
+      client.print("</li>");
     }
     client.print("</ul>");
   }
@@ -184,4 +164,7 @@ void listConnectedDevices(WiFiClient &client)
   {
     client.print("No devices connected<br>");
   }
+
+  // Free allocated memory
+  delete[] devices.data;
 }
