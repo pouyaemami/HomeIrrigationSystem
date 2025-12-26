@@ -4,15 +4,17 @@
 #include <WiFi101.h>
 #include <DHT.h>
 
-#include "wifi_credentials.h"
+#include "config.h"
 #include "enums.h"
 #include "Web.h"
+#include "MDNS.h"
 
-char ssid[] = SECRET_SSID;   // your network SSID (name)
-char pass[] = SECRET_PASS;   // your network password (use for WPA, or use as key for WEP)
-int status = WL_IDLE_STATUS; // the Wifi radio's status
+// int status = WL_IDLE_STATUS; // the Wifi radio's status
 
 WiFiServer server(80);
+WiFiClient client = server.available();
+MDNS mdns;
+
 int ledPin = LED_BUILTIN;
 
 #define DHTPIN 0      // Pin which is connected to the DHT sensor
@@ -31,30 +33,6 @@ uint8_t maxI2cBuffer = MAX_I2C_BUFFER;
 uint8_t nextAvailableAddress = BASE_ASSIGNED_ADDRESS;
 uint8_t knownDevices[MAX_DEVICES];
 uint8_t deviceCount = 0;
-
-void receiveResponse()
-{
-  if (!Wire.available())
-    return;
-
-  // Read length byte (first byte)
-  uint8_t dataLength = Wire.read();
-
-  // Read the actual data
-  String response = "";
-  for (uint8_t i = 0; i < dataLength && Wire.available(); i++)
-  {
-    char c = Wire.read();
-    response += c;
-  }
-
-  if (response.length() > 0)
-  {
-    Serial.print("  Received: ");
-    Serial.print(response);
-    Serial.println("");
-  }
-}
 
 void assignAddress(byte defaultAddr)
 {
@@ -156,35 +134,8 @@ void printData()
   Serial.println(rssi);
 }
 
-void setup()
+void scanI2CDevices()
 {
-  Wire.begin(); // join i2c bus as master
-
-  while (!Serial)
-    ;
-
-  // attempt to connect to Wifi network:
-  while (status != WL_CONNECTED)
-  {
-    Serial.print("Attempting to connect to network: ");
-    Serial.println(ssid);
-    // Connect to WPA/WPA2 network:
-    status = WiFi.begin(ssid, pass);
-
-    // wait 1 second for connection:
-    delay(1000);
-  }
-
-  // you're connected now, so print out the data:
-  Serial.println("You're connected to the network");
-
-  Serial.println("----------------------------------------");
-  printData();
-  Serial.println("----------------------------------------");
-
-  server.begin();
-
-  Serial.begin(115200);
   while (!Serial)
     delay(10);
   Serial.println("\nI2C Scanner with Address Assignment");
@@ -210,24 +161,32 @@ void setup()
       }
     }
   }
+  Serial.println("\nDevice discovery complete!");
+}
+
+void setup()
+{
+  Serial.begin(SERIAL_BAUD_RATE);
+
+  // Setup MDNS
+  mdns.setup(server, "irrigation-system");
+
+  Wire.begin(); // join i2c bus as master
+  // Scan for I2C devices and assign addresses
+  scanI2CDevices();
 
   // Discover all devices and build the device list
-  Serial.println();
   discoverDevices();
-  Serial.println("\nDevice discovery complete!");
 
   dht.begin();
 }
 
 void loop()
 {
-  WiFiClient client = server.available();
-
-  if (client)
-  {
-    printWeb(client);
-  }
-
+  mdns.poll();
   temperature = dht.readTemperature();
   humidity = dht.readHumidity();
+
+  client = server.available();
+  printWeb(client);
 }

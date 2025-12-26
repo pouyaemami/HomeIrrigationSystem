@@ -3,13 +3,6 @@
 #include <Wire.h>
 #include "enums.h"
 
-extern uint8_t knownDevices[];
-extern uint8_t deviceCount;
-extern uint8_t maxI2cBuffer;
-
-extern float temperature;
-extern float humidity;
-
 // Helper function to extract query parameter value from URL
 String getQueryParam(String url, String paramName)
 {
@@ -47,6 +40,9 @@ void sendDeviceCommand(String addressParam, DeviceAction action)
 
 void printWeb(WiFiClient &client)
 {
+  if (!client)
+    return;
+
   Serial.println("new client"); // print a message out the serial port
   String currentLine = "";      // make a String to hold incoming data from the client
   while (client.connected())

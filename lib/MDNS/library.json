@@ -1,0 +1,8 @@
+{
+  "name": "MDNS",
+  "version": "1.0.6",
+  "description": "mDNS library for Arduino",
+  "build": {
+    "flags": ["-I$PROJECT_SRC_DIR", "-I$PROJECT_INCLUDE_DIR"]
+  }
+}

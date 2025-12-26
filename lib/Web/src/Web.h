@@ -7,6 +7,9 @@ extern uint8_t knownDevices[];
 extern uint8_t deviceCount;
 extern uint8_t maxI2cBuffer;
 
+extern float temperature;
+extern float humidity;
+
 void printWeb(WiFiClient &client);
 
 void listTemperatureHumidity(WiFiClient &client);

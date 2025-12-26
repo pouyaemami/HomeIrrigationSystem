@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <ArduinoJson.h>
+
+#include "config.h"
 #include "enums.h"
 
 #define DEFAULT_ADDRESS 0x00 // Default unassigned address (general call)
@@ -125,7 +127,7 @@ void setup()
   pinMode(ledPin, OUTPUT);
   pinMode(valvePin, OUTPUT);
   digitalWrite(valvePin, LOW);
-  Serial.begin(115200);
+  Serial.begin(SERIAL_BAUD_RATE);
   Serial.println("I2C Slave starting...");
 
   Wire.begin(DEFAULT_ADDRESS);  // Start with general call address
